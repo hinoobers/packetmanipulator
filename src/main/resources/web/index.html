@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minecraft Packet Monitor</title>
+    <style>
+        /* Dark theme */
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background: #121212;
+            color: #e0e0e0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+            background: #1e1e1e;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 6px 12px;
+        }
+        th {
+            background: #2c2c2c;
+        }
+        pre {
+            margin: 0;
+            font-size: 0.85em;
+            color: #ccc;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        #controls {
+            margin-bottom: 10px;
+        }
+        select, button {
+            background: #2c2c2c;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 6px 10px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        select:hover, button:hover {
+            background: #3d3d3d;
+        }
+
+        /* Context Menu Styles */
+        #contextMenu {
+            position: absolute;
+            background: #2c2c2c;
+            border: 1px solid #555;
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.7);
+            z-index: 1000;
+            display: none;
+            min-width: 160px;
+            border-radius: 4px;
+        }
+        #contextMenu ul {
+            list-style: none;
+            margin: 0;
+            padding: 4px 0;
+        }
+        #contextMenu li {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        #contextMenu li:hover {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Minecraft Packet Monitor</h1>
+
+<div id="controls">
+    <label for="playerSelect">Select Player: </label>
+    <select id="playerSelect"></select>
+
+    <button id="pauseUIBtn">Pause UI</button>
+    <button id="pauseServerBtn">Pause Server Packets</button>
+</div>
+
+<table>
+    <thead>
+    <tr>
+        <th>#</th>
+        <th>Packet Name</th>
+        <th>Timestamp</th>
+        <th>Details</th>
+    </tr>
+    </thead>
+    <tbody id="packetTableBody"></tbody>
+</table>
+
+<!-- Context Menu -->
+<div id="contextMenu">
+    <ul>
+        <li id="ignorePacket">Ignore this type of packet</li>
+        <li id="replayPacket">Replay this packet</li>
+    </ul>
+</div>
+
+<script>
+    const playerSelect = document.getElementById('playerSelect');
+    const pauseUIBtn = document.getElementById('pauseUIBtn');
+    const pauseServerBtn = document.getElementById('pauseServerBtn');
+    const packetTableBody = document.getElementById('packetTableBody');
+    const contextMenu = document.getElementById('contextMenu');
+    const ignorePacketBtn = document.getElementById('ignorePacket');
+    const replayPacketBtn = document.getElementById('replayPacket');
+
+    let ws = null;
+    let pausedUI = false;
+    let pausedServer = false;
+    let buffer = [];
+    let packetCount = 0;
+    let currentPlayers = [];
+    let currentUUID = null;
+    const ignoredPackets = new Set();
+
+    // For context menu state
+    let currentRightClicked = null;
+
+    function fetchPlayers(autoUpdate = false) {
+        fetch('/players')
+            .then(res => res.json())
+            .then(players => {
+                const newUUID = players.length > 0 ? players[0].uuid : null;
+                const playerChanged = JSON.stringify(players) !== JSON.stringify(currentPlayers);
+
+                if (playerChanged) {
+                    currentPlayers = players;
+
+                    playerSelect.innerHTML = '';
+                    players.forEach(p => {
+                        const option = document.createElement('option');
+                        option.value = p.uuid;
+                        option.textContent = p.name;
+                        playerSelect.appendChild(option);
+                    });
+
+                    if (!currentUUID || !players.find(p => p.uuid === currentUUID)) {
+                        currentUUID = newUUID;
+                        playerSelect.value = currentUUID;
+                        connectWebSocket(currentUUID);
+                        updatePauseServerButton(currentUUID);
+                    } else if (autoUpdate) {
+                        playerSelect.value = currentUUID;
+                    }
+                }
+            })
+            .catch(console.error);
+    }
+
+    function connectWebSocket(uuid) {
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        packetCount = 0;
+        packetTableBody.innerHTML = '';
+        buffer = [];
+
+        ws = new WebSocket(`ws://${location.host}/ws/packets/${uuid}`);
+
+        ws.onmessage = event => {
+            try {
+                const pkt = JSON.parse(event.data);
+                if (ignoredPackets.has(pkt.packetName)) return; // ignore filtered packets
+
+                // Artificial delay 100ms
+                setTimeout(() => {
+                    if (pausedUI) {
+                        buffer.push(pkt);
+                    } else {
+                        addPacketToTable(pkt);
+                    }
+                }, 100);
+            } catch(e) {
+                console.error('Invalid packet data:', event.data);
+            }
+        };
+
+        ws.onclose = () => console.log('WebSocket closed');
+        ws.onerror = e => console.error('WebSocket error', e);
+    }
+
+    function addPacketToTable(pkt) {
+        packetCount++;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+      <td>${packetCount}</td>
+      <td>${pkt.packetName || 'Unknown'}</td>
+      <td>${new Date(pkt.timestamp).toLocaleTimeString() || '-'}</td>
+      <td><pre>${JSON.stringify(pkt, null, 2)}</pre></td>
+    `;
+
+        // Right click listener for context menu
+        row.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            currentRightClicked = pkt || 'Unknown';
+            showContextMenu(e.pageX, e.pageY);
+        });
+
+        if (packetTableBody.firstChild) {
+            packetTableBody.insertBefore(row, packetTableBody.firstChild);
+        } else {
+            packetTableBody.appendChild(row);
+        }
+    }
+
+    function showContextMenu(x, y) {
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        contextMenu.style.display = 'block';
+    }
+
+    function hideContextMenu() {
+        contextMenu.style.display = 'none';
+        currentRightClicked = null;
+    }
+
+    ignorePacketBtn.addEventListener('click', () => {
+        if (currentRightClicked) {
+            ignoredPackets.add(currentRightClicked);
+            hideContextMenu();
+        }
+    });
+
+    replayPacketBtn.addEventListener('click', () => {
+        if (currentRightClicked) {
+            // Send the packet JSON to server for replay
+            fetch('/receivePacket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentRightClicked)
+            })
+                .then(res => res.text())
+                .then(msg => {
+                    alert('Packet replayed: ' + msg);
+                    hideContextMenu();
+                })
+                .catch(err => {
+                    alert('Failed to replay packet: ' + err);
+                    hideContextMenu();
+                });
+        }
+    });
+
+    // Hide context menu on clicking anywhere else
+    document.addEventListener('click', () => {
+        hideContextMenu();
+    });
+
+    pauseUIBtn.addEventListener('click', () => {
+        pausedUI = !pausedUI;
+        pauseUIBtn.textContent = pausedUI ? 'Resume UI' : 'Pause UI';
+
+        if (!pausedUI) {
+            buffer.forEach(addPacketToTable);
+            buffer = [];
+        }
+    });
+
+    pauseServerBtn.addEventListener('click', () => {
+        const uuid = playerSelect.value;
+        pausedServer = !pausedServer;
+        fetch(`/pausePackets?uuid=${uuid}&pause=${pausedServer}`, { method: 'POST' })
+            .then(res => res.text())
+            .then(msg => {
+                updatePauseServerButton(uuid);
+            })
+            .catch(console.error);
+    });
+
+    playerSelect.addEventListener('change', () => {
+        currentUUID = playerSelect.value;
+        connectWebSocket(currentUUID);
+        updatePauseServerButton(currentUUID);
+    });
+
+    function updatePauseServerButton(uuid) {
+        pauseServerBtn.textContent = pausedServer ? 'Resume CS Packets' : 'Pause CS Packets';
+    }
+
+    // Auto refresh players every 1 second
+    setInterval(() => {
+        fetchPlayers(true);
+    }, 1000);
+
+    // Initial load
+    fetchPlayers();
+
+</script>
+
+</body>
+</html>

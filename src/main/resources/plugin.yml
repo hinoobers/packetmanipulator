@@ -1,0 +1,4 @@
+main: org.hinoob.pma.PacketManipulator
+name: PacketManipulator
+depend: [packetevents]
+version: 1.0.0
