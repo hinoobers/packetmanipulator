@@ -122,7 +122,6 @@
     let currentUUID = null;
     const ignoredPackets = new Set();
 
-    // For context menu state
     let currentRightClicked = null;
 
     function fetchPlayers(autoUpdate = false) {
@@ -172,7 +171,6 @@
                 const pkt = JSON.parse(event.data);
                 if (ignoredPackets.has(pkt.packetName)) return; // ignore filtered packets
 
-                // Artificial delay 100ms
                 setTimeout(() => {
                     if (pausedUI) {
                         buffer.push(pkt);
@@ -199,7 +197,7 @@
       <td><pre>${JSON.stringify(pkt, null, 2)}</pre></td>
     `;
 
-        // Right click listener for context menu
+        // Context menu
         row.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             currentRightClicked = pkt || 'Unknown';
@@ -233,7 +231,6 @@
 
     replayPacketBtn.addEventListener('click', () => {
         if (currentRightClicked) {
-            // Send the packet JSON to server for replay
             fetch('/receivePacket', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
