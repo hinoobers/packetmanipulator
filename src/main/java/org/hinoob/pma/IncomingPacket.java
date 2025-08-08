@@ -47,7 +47,6 @@ public class IncomingPacket {
         ByteBuf buf = (ByteBuf) event.getFullBufferClone();
         this.data = new byte[buf.readableBytes()];
         buf.readBytes(this.data);
-        buf.release(); // Release the buffer to prevent memory leaks
     }
 
     public IncomingPacket() {
@@ -93,10 +92,9 @@ public class IncomingPacket {
 
     public void send() {
         ByteBuf buf = ByteBufAllocator.DEFAULT.buffer();
-        PacketWrapper<?> wrapper = new PacketWrapper(ClientVersion.UNKNOWN, PacketEvents.getAPI().getServerManager().getVersion(), this.type.getId(ClientVersion.V_1_21_5));
-        wrapper.buffer = buf;
-        wrapper.writeBytes(this.data);
-        from.receivePacket(wrapper);
+        buf.writeBytes(this.data);
+
+        from.receivePacket(buf);
     }
 
 }

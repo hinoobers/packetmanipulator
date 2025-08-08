@@ -1,5 +1,6 @@
 package org.hinoob.pma;
 
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPong;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -63,7 +64,6 @@ public class WebServer {
             ctx.onConnect(wsConnectContext -> listeners.computeIfAbsent(UUID.fromString(wsConnectContext.pathParam("uuid")), k -> ConcurrentHashMap.newKeySet())
                     .add(wsConnectContext.session));
             ctx.onClose(wsCloseContext -> {
-
                 UUID uuid = UUID.fromString(wsCloseContext.pathParam("uuid"));
                 Set<Session> sessions = listeners.get(uuid);
                 if (sessions != null) {

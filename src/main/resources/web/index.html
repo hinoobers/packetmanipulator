@@ -70,6 +70,29 @@
         #contextMenu li:hover {
             background: #444;
         }
+
+        #scrollUpBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2c2c2c;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            z-index: 999;
+        }
+        #scrollUpBtn.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #scrollUpBtn:hover {
+            background: #3d3d3d;
+        }
     </style>
 </head>
 <body>
@@ -104,6 +127,8 @@
     </ul>
 </div>
 
+<button id="scrollUpBtn">Scroll up?</button>
+
 <script>
     const playerSelect = document.getElementById('playerSelect');
     const pauseUIBtn = document.getElementById('pauseUIBtn');
@@ -112,6 +137,7 @@
     const contextMenu = document.getElementById('contextMenu');
     const ignorePacketBtn = document.getElementById('ignorePacket');
     const replayPacketBtn = document.getElementById('replayPacket');
+    const scrollUpBtn = document.getElementById('scrollUpBtn');
 
     let ws = null;
     let pausedUI = false;
@@ -187,6 +213,8 @@
         ws.onerror = e => console.error('WebSocket error', e);
     }
 
+
+
     function addPacketToTable(pkt) {
         packetCount++;
         const row = document.createElement('tr');
@@ -194,7 +222,12 @@
       <td>${packetCount}</td>
       <td>${pkt.packetName || 'Unknown'}</td>
       <td>${new Date(pkt.timestamp).toLocaleTimeString() || '-'}</td>
-      <td><pre>${JSON.stringify(pkt, null, 2)}</pre></td>
+      <td><pre>${JSON.stringify(pkt, (key, value) => {
+            if (["uniqueId"].includes(key)) {
+                return undefined; // removes the key
+            }
+            return value;
+        }, 2)}</pre></td>
     `;
 
         // Context menu
@@ -224,7 +257,7 @@
 
     ignorePacketBtn.addEventListener('click', () => {
         if (currentRightClicked) {
-            ignoredPackets.add(currentRightClicked);
+            ignoredPackets.add(currentRightClicked.packetName);
             hideContextMenu();
         }
     });
@@ -279,6 +312,22 @@
         connectWebSocket(currentUUID);
         updatePauseServerButton(currentUUID);
     });
+
+    scrollUpBtn.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 100) {
+            scrollUpBtn.classList.add('show');
+        } else {
+            scrollUpBtn.classList.remove('show');
+        }
+    });
+
 
     function updatePauseServerButton(uuid) {
         pauseServerBtn.textContent = pausedServer ? 'Resume CS Packets' : 'Pause CS Packets';
