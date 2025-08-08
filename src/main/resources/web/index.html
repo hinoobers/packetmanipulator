@@ -104,7 +104,8 @@
     <select id="playerSelect"></select>
 
     <button id="pauseUIBtn">Pause UI</button>
-    <button id="pauseServerBtn">Pause Server Packets</button>
+    <button id="pauseCSBtn">Pause CS Packets</button>
+    <button id="pauseSCBtn">Pause SC Packets</button>
 </div>
 
 <table>
@@ -132,7 +133,8 @@
 <script>
     const playerSelect = document.getElementById('playerSelect');
     const pauseUIBtn = document.getElementById('pauseUIBtn');
-    const pauseServerBtn = document.getElementById('pauseServerBtn');
+    const pauseCSBtn = document.getElementById('pauseCSBtn');
+    const pauseSCBtn = document.getElementById('pauseSCBtn');
     const packetTableBody = document.getElementById('packetTableBody');
     const contextMenu = document.getElementById('contextMenu');
     const ignorePacketBtn = document.getElementById('ignorePacket');
@@ -141,7 +143,8 @@
 
     let ws = null;
     let pausedUI = false;
-    let pausedServer = false;
+    let pausedCS = false;
+    let pausedSC = false;
     let buffer = [];
     let packetCount = 0;
     let currentPlayers = [];
@@ -296,10 +299,25 @@
         }
     });
 
-    pauseServerBtn.addEventListener('click', () => {
+    pauseCSBtn.addEventListener('click', () => {
         const uuid = playerSelect.value;
-        pausedServer = !pausedServer;
-        fetch(`/pausePackets?uuid=${uuid}&pause=${pausedServer}`, { method: 'POST' })
+        pausedCS = !pausedCS;
+        fetch(`/pausePackets`, { method: 'POST',
+            body: JSON.stringify({uuid: uuid, paused_client_server: pausedCS, paused_server_client: pausedSC}),
+            headers: { 'Content-Type': 'application/json' } })
+            .then(res => res.text())
+            .then(msg => {
+                updatePauseServerButton(uuid);
+            })
+            .catch(console.error);
+    });
+
+    pauseSCBtn.addEventListener('click', () => {
+        const uuid = playerSelect.value;
+        pausedSC = !pausedSC;
+        fetch(`/pausePackets`, { method: 'POST',
+            body: JSON.stringify({uuid: uuid, paused_client_server: pausedCS, paused_server_client: pausedSC}),
+            headers: { 'Content-Type': 'application/json' } })
             .then(res => res.text())
             .then(msg => {
                 updatePauseServerButton(uuid);
@@ -330,7 +348,8 @@
 
 
     function updatePauseServerButton(uuid) {
-        pauseServerBtn.textContent = pausedServer ? 'Resume CS Packets' : 'Pause CS Packets';
+        pauseCSBtn.textContent = pausedCS ? 'Resume CS Packets' : 'Pause CS Packets';
+        pauseSCBtn.textContent = pausedSC ? 'Resume SC Packets' : 'Pause SC Packets';
     }
 
     // Auto refresh players every 1 second

@@ -13,6 +13,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.common.WebSocketSession;
+import org.hinoob.pma.util.UserData;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
@@ -40,6 +41,10 @@ public class WebServer {
             JsonObject response = new JsonObject();
             JsonArray packets = new JsonArray();
             PacketLogger.getIncomingPackets(uuid).forEach(packet -> {
+                JsonObject packetJson = packet.toJSON();
+                packets.add(packetJson);
+            });
+            PacketLogger.getOutgoingPackets(uuid).forEach(packet -> {
                 JsonObject packetJson = packet.toJSON();
                 packets.add(packetJson);
             });
@@ -75,15 +80,27 @@ public class WebServer {
             });
         });
         javalin.post("/pausePackets", ctx -> {
-            UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
+            String json = ctx.body();
+            JsonObject object = new Gson().fromJson(json, JsonObject.class);
 
-            PacketLogger.getUserData(uuid).incomingPacketsPaused = Boolean.parseBoolean(ctx.queryParam("pause"));
+            UUID uuid = UUID.fromString(object.get("uuid").getAsString());
+            boolean paused_client_server = object.get("paused_client_server").getAsBoolean();
+            boolean paused_server_client = object.get("paused_server_client").getAsBoolean();
+
+            UserData userData = PacketLogger.getUserData(uuid);
+            userData.incomingPacketsPaused = paused_client_server;
+            userData.outgoingPacketsPaused = paused_server_client;
         });
         javalin.post("/receivePacket", ctx -> {
             String json = ctx.body();
             JsonObject object = new Gson().fromJson(json, JsonObject.class);
-            IncomingPacket packet = IncomingPacket.from(object);
-            packet.send();
+            if(object.get("packetTypeSide").getAsString().equals("SERVER")) {
+                OutgoingPacket packet = OutgoingPacket.from(object);
+                packet.send();
+            } else {
+                IncomingPacket packet = IncomingPacket.from(object);
+                packet.send();
+            }
             ctx.result("Success!");
         });
         plugin.getLogger().info("Web server started on port " + port);

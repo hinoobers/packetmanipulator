@@ -19,14 +19,6 @@ public class PacketListener extends PacketListenerAbstract {
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
-        if(event.getPacketType() == PacketType.Play.Client.CHAT_MESSAGE) {
-
-            ByteBuf fullBuffer = ((ByteBuf) event.getFullBufferClone()).copy();
-            byte[] data = new byte[fullBuffer.readableBytes()];
-            fullBuffer.readBytes(data);
-            System.out.println("readableBytes: " + data.length);
-            System.out.println("A->" + Base64.getEncoder().encodeToString(data));
-        }
         PacketLogger.logIncoming(event.getUser().getUUID(), event);
     }
 }

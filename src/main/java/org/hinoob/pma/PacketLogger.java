@@ -24,8 +24,8 @@ public class PacketLogger {
             return; // Skip logging if incoming packets are paused for this user
         }
         IncomingPacket packet = new IncomingPacket(event);
-
         user.incomingPackets.add(packet);
+
         PacketManipulator.getInstance().getWebServer().getSessionsFor(uuid).forEach(session -> {
             if (session.isOpen()) {
                 try {
@@ -43,14 +43,29 @@ public class PacketLogger {
             user = new UserData(uuid);
             userData.put(uuid, user);
         }
-        user.outgoingPackets.add(event);
+        if(user.outgoingPacketsPaused) {
+            event.setCancelled(true);
+            return; // Skip logging if outgoing packets are paused for this user
+        }
+        OutgoingPacket packet = new OutgoingPacket(event);
+        user.outgoingPackets.add(packet);
+
+        PacketManipulator.getInstance().getWebServer().getSessionsFor(uuid).forEach(session -> {
+            if (session.isOpen()) {
+                try {
+                    session.getRemote().sendString(packet.toJSON().toString());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
     }
 
     public static List<IncomingPacket> getIncomingPackets(UUID uuid) {
         return userData.get(uuid) != null ? userData.get(uuid).incomingPackets : new ArrayList<>();
     }
 
-    public static List<PacketSendEvent> getOutgoingPackets(UUID uuid) {
+    public static List<OutgoingPacket> getOutgoingPackets(UUID uuid) {
         return userData.get(uuid) != null ? userData.get(uuid).outgoingPackets : new ArrayList<>();
     }
 
