@@ -60,10 +60,23 @@ public class WebServer {
                 JsonObject playerJson = new JsonObject();
                 playerJson.addProperty("uuid", uuid.toString());
                 playerJson.addProperty("name", Bukkit.getOfflinePlayer(uuid).getName());
+                playerJson.addProperty("online", Bukkit.getPlayer(uuid) != null);
                 playersArray.add(playerJson);
             }
             ctx.contentType("application/json");
             ctx.result(playersArray.toString());
+        });
+        javalin.get("/player/{uuid}", ctx -> {
+            UUID uuid = UUID.fromString(ctx.pathParam("uuid"));
+            UserData userData = PacketLogger.getUserData(uuid);
+
+            JsonObject response = new JsonObject();
+            response.addProperty("uuid", uuid.toString());
+            response.addProperty("paused_client_server", userData.incomingPacketsPaused);
+            response.addProperty("paused_server_client", userData.outgoingPacketsPaused);
+
+            ctx.contentType("application/json");
+            ctx.result(response.toString());
         });
         javalin.ws("/ws/packets/{uuid}", ctx -> {
             ctx.onConnect(wsConnectContext -> listeners.computeIfAbsent(UUID.fromString(wsConnectContext.pathParam("uuid")), k -> ConcurrentHashMap.newKeySet())

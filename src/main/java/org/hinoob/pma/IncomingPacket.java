@@ -18,6 +18,7 @@ import io.netty.buffer.EmptyByteBuf;
 import lombok.SneakyThrows;
 import org.bukkit.Bukkit;
 import org.checkerframework.checker.units.qual.A;
+import org.hinoob.pma.util.PacketDataUtil;
 import org.hinoob.pma.util.TestUtil;
 
 import java.io.*;
@@ -37,6 +38,7 @@ public class IncomingPacket {
     private long timestamp;
     private String uniqueId;
     private byte[] data;
+    private JsonObject readable;
 
     public IncomingPacket(PacketReceiveEvent event) {
         this.from = event.getUser();
@@ -47,6 +49,7 @@ public class IncomingPacket {
         ByteBuf buf = (ByteBuf) event.getFullBufferClone();
         this.data = new byte[buf.readableBytes()];
         buf.readBytes(this.data);
+        this.readable = PacketDataUtil.convertToReadable(event);
     }
 
     public IncomingPacket() {
@@ -86,6 +89,9 @@ public class IncomingPacket {
         json.addProperty("timestamp", this.timestamp);
         json.addProperty("uniqueId", this.uniqueId);
         json.addProperty("data", Base64.getEncoder().encodeToString(this.data));
+        if(readable != null) {
+            json.add("readable", readable);
+        }
         return json;
     }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Minecraft Packet Monitor</title>
+    <title>packetmanipulator</title>
     <style>
         /* Dark theme */
         body {
@@ -103,9 +103,17 @@
     <label for="playerSelect">Select Player: </label>
     <select id="playerSelect"></select>
 
+    <button id="clearBtn">Clear</button>
+    <button id="resetFiltersBtn">Reset filters</button>
     <button id="pauseUIBtn">Pause UI</button>
     <button id="pauseCSBtn">Pause CS Packets</button>
     <button id="pauseSCBtn">Pause SC Packets</button>
+
+    <select name="packetFilter" id="packetFilter">
+        <option value="cs">CS packets only</option>
+        <option value="sc">SC packets only</option>
+        <option value="all">All packets</option>
+    </select>
 </div>
 
 <table>
@@ -124,6 +132,7 @@
 <div id="contextMenu">
     <ul>
         <li id="ignorePacket">Ignore this type of packet</li>
+        <li id="allowPacket">Add this to allowlisted packets</li>
         <li id="replayPacket">Replay this packet</li>
     </ul>
 </div>
@@ -135,11 +144,15 @@
     const pauseUIBtn = document.getElementById('pauseUIBtn');
     const pauseCSBtn = document.getElementById('pauseCSBtn');
     const pauseSCBtn = document.getElementById('pauseSCBtn');
+    const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+    const clearBtn = document.getElementById('clearBtn');
     const packetTableBody = document.getElementById('packetTableBody');
     const contextMenu = document.getElementById('contextMenu');
     const ignorePacketBtn = document.getElementById('ignorePacket');
+    const allowPacketBtn = document.getElementById('allowPacket');
     const replayPacketBtn = document.getElementById('replayPacket');
     const scrollUpBtn = document.getElementById('scrollUpBtn');
+    const packetFilter = document.getElementById('packetFilter');
 
     let ws = null;
     let pausedUI = false;
@@ -150,6 +163,7 @@
     let currentPlayers = [];
     let currentUUID = null;
     const ignoredPackets = new Set();
+    const allowedPackets = new Set();
 
     let currentRightClicked = null;
 
@@ -199,6 +213,9 @@
             try {
                 const pkt = JSON.parse(event.data);
                 if (ignoredPackets.has(pkt.packetName)) return; // ignore filtered packets
+                if (allowedPackets.size > 0 && !allowedPackets.has(pkt.packetName)) return; // only allow listed packets
+                if (packetFilter.value === 'cs' && pkt.packetTypeSide != "CLIENT") return;
+                if (packetFilter.value === 'sc' && pkt.packetTypeSide != "SERVER") return;
 
                 setTimeout(() => {
                     if (pausedUI) {
@@ -220,13 +237,20 @@
 
     function addPacketToTable(pkt) {
         packetCount++;
+
+        const beautifiedPkt = { ...pkt };
+        if(beautifiedPkt.readable) {
+            beautifiedPkt.data = beautifiedPkt.readable;
+            delete beautifiedPkt.readable;
+        }
+
         const row = document.createElement('tr');
         row.innerHTML = `
       <td>${packetCount}</td>
       <td>${pkt.packetName || 'Unknown'}</td>
       <td>${new Date(pkt.timestamp).toLocaleTimeString() || '-'}</td>
-      <td><pre>${JSON.stringify(pkt, (key, value) => {
-            if (["uniqueId"].includes(key)) {
+      <td><pre>${JSON.stringify(beautifiedPkt, (key, value) => {
+            if (key === "uniqueId") {
                 return undefined; // removes the key
             }
             return value;
@@ -258,9 +282,27 @@
         currentRightClicked = null;
     }
 
+    resetFiltersBtn.addEventListener('click', () => {
+        ignoredPackets.clear();
+        allowedPackets.clear();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        packetCount = 0;
+        packetTableBody.innerHTML = '';
+        buffer = [];
+    });
+
     ignorePacketBtn.addEventListener('click', () => {
         if (currentRightClicked) {
             ignoredPackets.add(currentRightClicked.packetName);
+            hideContextMenu();
+        }
+    });
+
+    allowPacketBtn.addEventListener('click', () => {
+        if (currentRightClicked) {
+            allowedPackets.add(currentRightClicked.packetName);
             hideContextMenu();
         }
     });
@@ -341,6 +383,10 @@
     window.addEventListener('scroll', () => {
         if (window.scrollY > 100) {
             scrollUpBtn.classList.add('show');
+            if (!pausedUI) {
+                pausedUI = true;
+                pauseUIBtn.textContent = 'Resume UI (auto-paused)';
+            }
         } else {
             scrollUpBtn.classList.remove('show');
         }
@@ -348,8 +394,15 @@
 
 
     function updatePauseServerButton(uuid) {
-        pauseCSBtn.textContent = pausedCS ? 'Resume CS Packets' : 'Pause CS Packets';
-        pauseSCBtn.textContent = pausedSC ? 'Resume SC Packets' : 'Pause SC Packets';
+        fetch(`/player/${uuid}`)
+            .then(res => res.json())
+            .then(status => {
+                pausedCS = status.paused_client_server;
+                pausedSC = status.paused_server_client;
+                pauseCSBtn.textContent = pausedCS ? 'Resume CS Packets' : 'Pause CS Packets';
+                pauseSCBtn.textContent = pausedSC ? 'Resume SC Packets' : 'Pause SC Packets';
+            })
+            .catch(console.error);
     }
 
     // Auto refresh players every 1 second
